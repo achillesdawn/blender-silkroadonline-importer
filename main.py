@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from io import BufferedReader
 
-
+from typing import TypedDict
 
 
 FLAG_ENVIRONMENT = "<IH"
@@ -33,7 +33,7 @@ class MapVertex:
     brightness: int
 
     def get_texture_data(self):
-        texture_id = self.texture_data & 0x000FFFFF
+        texture_id = self.texture_data & 0x3FF
         texture_scale = self.texture_data >> 10
 
         return texture_id, texture_scale
@@ -90,7 +90,16 @@ class MapBlock:
         _ = f.read(20)
 
 
+class TextureIndex(TypedDict):
+    _id: int
+    addr: int
+    map_name: str
+    file_name: str
+
+
 class MapImporter:
+
+    texture_map: dict[int, TextureIndex]
 
     def __init__(self, map_path: Path) -> None:
         self.base_path = map_path
@@ -109,27 +118,57 @@ class MapImporter:
             return map_blocks
 
     def read_tile2d_ifo(self):
-
         tile2d_ifo_path = self.base_path / "tile2d.ifo"
 
         if not tile2d_ifo_path.exists():
-            raise FileNotFoundError("tile2d.ifo not found! make sure the map_path points to the MAP data folder")
-        
-        with open(tile2d_ifo_path, 'r') as f:
+            raise FileNotFoundError(
+                "tile2d.ifo not found! make sure the map_path points to the MAP data folder"
+            )
+
+        with open(tile2d_ifo_path, "r") as f:
             lines = f.readlines()
 
             # header = lines[0]
             # version = lines[1]
 
+            result: dict[int, TextureIndex] = {}
+
             for line in lines[2:]:
+
                 # format: 00000 0x00000000 "CJfild" "c_dust_fld_01.ddj"
-                _id, addr, map_name, file_name = line.split(" ")
-                print(f"{_id=} {addr=} {map_name=} {file_name=}")
-                break
+                _id, addr, map_name, file_name, *_ = line.split(" ")
+
+                _id = int(_id)
+                addr = int(addr, 16)
+
+                value: TextureIndex = {
+                    "_id": _id,
+                    "addr": addr,
+                    "map_name": map_name.strip('"'),
+                    "file_name": file_name.strip().strip('"'),
+                }
+
+                result[_id] = value
+
+            self.texture_map = result
             
+            return result
+
 
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
-
 m = MapImporter(map_path)
-# m.read_tile2d_ifo()
-map_blocks = m.read_m_file()
+texture_map = m.read_tile2d_ifo()
+
+print(texture_map[500])
+
+# m_file = map_path / "0" / "0.m"
+# map_blocks = m.read_m_file(m_file)
+# for map_block in map_blocks:
+#     for map_vertex in map_block.map_vertices:
+#         if map_vertex.texture_data == 0:
+#             continue
+#         print(map_vertex)
+#         print(f"{map_vertex.texture_data=}")
+#         print(f"{map_vertex.get_texture_data()=}")
+#         break
+#     break
