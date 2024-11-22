@@ -1,9 +1,11 @@
+import bpy
+from bpy.types import FloatAttribute, IntAttribute
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 from io import BufferedReader
 
-from typing import TypedDict
+from typing import TypedDict, cast
 
 
 FLAG_ENVIRONMENT = "<IH"
@@ -98,7 +100,6 @@ class TextureIndex(TypedDict):
 
 
 class MapImporter:
-
     texture_map: dict[int, TextureIndex]
 
     def __init__(self, map_path: Path) -> None:
@@ -134,7 +135,6 @@ class MapImporter:
             result: dict[int, TextureIndex] = {}
 
             for line in lines[2:]:
-
                 # format: 00000 0x00000000 "CJfild" "c_dust_fld_01.ddj"
                 _id, addr, map_name, file_name, *_ = line.split(" ")
 
@@ -151,24 +151,80 @@ class MapImporter:
                 result[_id] = value
 
             self.texture_map = result
-            
+
             return result
 
 
+class BlenderMapImporter:
+    texture_map: dict[int, TextureIndex]
+
+    def __init__(self, map_path: Path) -> None:
+        self.base_path = map_path
+
+    def import_map(self):
+        assert bpy.context
+
+        m = MapImporter(self.base_path)
+        self.texture_map = m.read_tile2d_ifo()
+
+        m_file = map_path / "0" / "0.m"
+        map_blocks = m.read_m_file(m_file)
+        for _, map_block in enumerate(map_blocks):
+            bpy.ops.mesh.primitive_grid_add(  # type: ignore
+                x_subdivisions=16,
+                y_subdivisions=16,
+                size=1,
+                enter_editmode=False,
+                align="WORLD",
+                location=(0, 0, 0),
+                scale=(1, 1, 1),
+            )
+
+            ob = bpy.context.active_object
+
+            assert ob
+            print(ob.name)
+
+            data = cast(bpy.types.Mesh, ob.data)
+
+            data.attributes.new("height", "FLOAT", "POINT")  # type: ignore
+            data.attributes.new("scale", "INT", "POINT")  # type: ignore
+            data.attributes.new("texture", "INT", "POINT")  # type: ignore
+            data.attributes.new("brightness", "INT", "POINT")  # type: ignore
+
+            data.attributes.new("max_height", "FLOAT", "POINT")  # type: ignore
+            data.attributes.new("min_height", "FLOAT", "POINT")  # type: ignore
+
+            height = cast(FloatAttribute, data.attributes["height"])
+            scale_attr = cast(IntAttribute, data.attributes["scale"])
+            texture = cast(IntAttribute, data.attributes["texture"])
+            brightness = cast(IntAttribute, data.attributes["brightness"])
+
+            max_height = cast(FloatAttribute, data.attributes["max_height"])
+            min_height = cast(FloatAttribute, data.attributes["min_height"])
+
+            for vertex_idx, map_vertex in enumerate(map_block.map_vertices):
+                texture_id, scale = map_vertex.get_texture_data()
+
+                height.data[vertex_idx].value = map_vertex.height
+                scale_attr.data[vertex_idx].value = scale
+                texture.data[vertex_idx].value = texture_id
+                brightness.data[vertex_idx].value = map_vertex.brightness
+
+                max_height.data[vertex_idx].value = map_block.height_max
+                min_height.data[vertex_idx].value = map_block.height_min
+
+            data.attributes.new("tile", "INT", "FACE")  # type: ignore
+
+            tile_attr = cast(IntAttribute, data.attributes["tile"])
+
+            for tile_idx, tile in enumerate(map_block.tile_map):
+                tile_attr.data[tile_idx].value = tile
+
+            break
+
+
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
-m = MapImporter(map_path)
-texture_map = m.read_tile2d_ifo()
 
-print(texture_map[500])
-
-# m_file = map_path / "0" / "0.m"
-# map_blocks = m.read_m_file(m_file)
-# for map_block in map_blocks:
-#     for map_vertex in map_block.map_vertices:
-#         if map_vertex.texture_data == 0:
-#             continue
-#         print(map_vertex)
-#         print(f"{map_vertex.texture_data=}")
-#         print(f"{map_vertex.get_texture_data()=}")
-#         break
-#     break
+b = BlenderMapImporter(map_path)
+b.import_map()
