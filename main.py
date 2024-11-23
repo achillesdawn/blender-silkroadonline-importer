@@ -186,6 +186,9 @@ class BlenderMapImporter:
         attribute_node.attribute_name = f"texture_{texture_id}"
 
         mix_node = cast(bpy.types.ShaderNodeMix, ntree.nodes.new("ShaderNodeMix"))
+        mix_node.data_type = "RGBA"
+        mix_node.label = str(texture_id)
+        mix_node.name = str(texture_id)
 
         ntree.links.new(mix_node.inputs[0], attribute_node.outputs[2])
         return attribute_node, mix_node
@@ -199,6 +202,8 @@ class BlenderMapImporter:
         ntree = material.node_tree
         assert ntree
 
+        previous_mix_node: bpy.types.ShaderNodeMix | None = None
+
         for idx, texture_id in enumerate(textures):
             image = self.create_image(texture_id, base_image_path)
             image_node = self.create_image_node(ntree, image)
@@ -207,7 +212,24 @@ class BlenderMapImporter:
             image_node.name = str(texture_id)
             image_node.label = str(texture_id)
 
-            attribute_node_, mix_node = self.create_attribute_mix(ntree, texture_id)
+            attribute_node, mix_node = self.create_attribute_mix(ntree, texture_id)
+            attribute_node.location = ((idx * 200) - 400, idx * 200)
+            mix_node.location = ((idx * 200) + 400, idx * 200)
+
+            ntree.links.new(mix_node.inputs[7], image_node.outputs[0])
+
+            if previous_mix_node:
+                ntree.links.new(mix_node.inputs[6], previous_mix_node.outputs[2])
+            else:
+                mix_node.inputs[6].default_value = (0,0,0,0) # type: ignore
+
+            previous_mix_node = mix_node
+
+        principled = ntree.nodes["Principled BSDF"]
+
+        assert previous_mix_node
+        ntree.links.new(principled.inputs['Base Color'], previous_mix_node.outputs[2])
+        return material
 
     def import_map(self):
         assert bpy.context
@@ -224,6 +246,8 @@ class BlenderMapImporter:
             for map_vertex in map_block.map_vertices:
                 texture_id, scale = map_vertex.get_texture_data()
                 textures.add(texture_id)
+
+        material = self.create_material(m_file.stem, textures)
 
         for map_block_idx, map_block in enumerate(map_blocks):
             bpy.ops.mesh.primitive_grid_add(  # type: ignore
@@ -242,6 +266,8 @@ class BlenderMapImporter:
             print(ob.name)
 
             data = cast(bpy.types.Mesh, ob.data)
+
+            data.materials.append(material) # type: ignore
 
             data.attributes.new("height", "FLOAT", "POINT")  # type: ignore
             data.attributes.new("scale", "INT", "POINT")  # type: ignore
@@ -289,7 +315,7 @@ class BlenderMapImporter:
             for tile_idx, tile in enumerate(map_block.tile_map):
                 tile_attr.data[tile_idx].value = tile
 
-        self.create_material(m_file.stem, textures)
+
 
 
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
