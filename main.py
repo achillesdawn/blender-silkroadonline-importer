@@ -249,6 +249,8 @@ class BlenderMapImporter:
 
         material = self.create_material(m_file.stem, textures)
 
+        set_height_nodes = bpy.data.node_groups.get("set_height")
+
         for map_block_idx, map_block in enumerate(map_blocks):
             bpy.ops.mesh.primitive_grid_add(  # type: ignore
                 x_subdivisions=16,
@@ -263,7 +265,7 @@ class BlenderMapImporter:
             ob = bpy.context.active_object
 
             assert ob
-            print(ob.name)
+            ob.name = m_file.name
 
             data = cast(bpy.types.Mesh, ob.data)
 
@@ -315,9 +317,15 @@ class BlenderMapImporter:
             for tile_idx, tile in enumerate(map_block.tile_map):
                 tile_attr.data[tile_idx].value = tile
 
+            if set_height_nodes:
+                geo_nodes = cast(bpy.types.NodesModifier , ob.modifiers.new("Height", "NODES")) # type: ignore
+                geo_nodes.node_group = set_height_nodes
+                geo_nodes['Socket_4'] = material
 
 
+            
 
+# set the path to your Silkroad_DATA-MAP/Map here
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
 
 b = BlenderMapImporter(map_path)
