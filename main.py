@@ -4,8 +4,8 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 from io import BufferedReader
-
-from typing import TypedDict, cast
+from math import floor
+from typing import Set, TypedDict, cast
 
 
 FLAG_ENVIRONMENT = "<IH"
@@ -161,22 +161,78 @@ class BlenderMapImporter:
     def __init__(self, map_path: Path) -> None:
         self.base_path = map_path
 
+    def create_image(self, texture_id: int, base_path: Path):
+        texture_data = self.texture_map[texture_id]
+
+        texture_path = base_path / texture_data["file_name"]
+
+        image = bpy.data.images.load(texture_path.with_suffix(".dds").as_posix())
+
+        return image
+
+    @staticmethod
+    def create_image_node(ntree: bpy.types.ShaderNodeTree, image: bpy.types.Image):
+        image_node = cast(
+            bpy.types.ShaderNodeTexImage, ntree.nodes.new("ShaderNodeTexImage")
+        )
+        image_node.image = image
+        return image_node
+
+    @staticmethod
+    def create_attribute_mix(ntree: bpy.types.ShaderNodeTree, texture_id: int):
+        attribute_node = cast(
+            bpy.types.ShaderNodeAttribute, ntree.nodes.new("ShaderNodeAttribute")
+        )
+        attribute_node.attribute_name = f"texture_{texture_id}"
+
+        mix_node = cast(bpy.types.ShaderNodeMix, ntree.nodes.new("ShaderNodeMix"))
+
+        ntree.links.new(mix_node.inputs[0], attribute_node.outputs[2])
+        return attribute_node, mix_node
+
+    def create_material(self, material_name: str, textures: Set[int]):
+        material = bpy.data.materials.new(material_name)
+        material.use_nodes = True
+
+        base_image_path = self.base_path / "tile2d"
+
+        ntree = material.node_tree
+        assert ntree
+
+        for idx, texture_id in enumerate(textures):
+            image = self.create_image(texture_id, base_image_path)
+            image_node = self.create_image_node(ntree, image)
+            image_node.location = (idx * 200, idx * 200)
+
+            image_node.name = str(texture_id)
+            image_node.label = str(texture_id)
+
+            attribute_node_, mix_node = self.create_attribute_mix(ntree, texture_id)
+
     def import_map(self):
         assert bpy.context
 
         m = MapImporter(self.base_path)
         self.texture_map = m.read_tile2d_ifo()
 
-        m_file = map_path / "0" / "0.m"
+        textures: Set[int] = set()
+
+        m_file = map_path / "96" / "168.m"
         map_blocks = m.read_m_file(m_file)
-        for _, map_block in enumerate(map_blocks):
+
+        for map_block in map_blocks:
+            for map_vertex in map_block.map_vertices:
+                texture_id, scale = map_vertex.get_texture_data()
+                textures.add(texture_id)
+
+        for map_block_idx, map_block in enumerate(map_blocks):
             bpy.ops.mesh.primitive_grid_add(  # type: ignore
                 x_subdivisions=16,
                 y_subdivisions=16,
                 size=1,
                 enter_editmode=False,
                 align="WORLD",
-                location=(0, 0, 0),
+                location=(map_block_idx % 6, floor(map_block_idx / 6), 0),
                 scale=(1, 1, 1),
             )
 
@@ -195,6 +251,9 @@ class BlenderMapImporter:
             data.attributes.new("max_height", "FLOAT", "POINT")  # type: ignore
             data.attributes.new("min_height", "FLOAT", "POINT")  # type: ignore
 
+            for texture_id in textures:
+                data.attributes.new(f"texture_{texture_id}", "FLOAT", "POINT")  # type: ignore
+
             height = cast(FloatAttribute, data.attributes["height"])
             scale_attr = cast(IntAttribute, data.attributes["scale"])
             texture = cast(IntAttribute, data.attributes["texture"])
@@ -202,6 +261,13 @@ class BlenderMapImporter:
 
             max_height = cast(FloatAttribute, data.attributes["max_height"])
             min_height = cast(FloatAttribute, data.attributes["min_height"])
+
+            texture_attributes: dict[int, FloatAttribute] = {}
+            for texture_id in textures:
+                texture_attribute = cast(
+                    FloatAttribute, data.attributes[f"texture_{texture_id}"]
+                )
+                texture_attributes[texture_id] = texture_attribute
 
             for vertex_idx, map_vertex in enumerate(map_block.map_vertices):
                 texture_id, scale = map_vertex.get_texture_data()
@@ -214,6 +280,8 @@ class BlenderMapImporter:
                 max_height.data[vertex_idx].value = map_block.height_max
                 min_height.data[vertex_idx].value = map_block.height_min
 
+                texture_attributes[texture_id].data[vertex_idx].value = 1
+
             data.attributes.new("tile", "INT", "FACE")  # type: ignore
 
             tile_attr = cast(IntAttribute, data.attributes["tile"])
@@ -221,7 +289,7 @@ class BlenderMapImporter:
             for tile_idx, tile in enumerate(map_block.tile_map):
                 tile_attr.data[tile_idx].value = tile
 
-            break
+        self.create_material(m_file.stem, textures)
 
 
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
