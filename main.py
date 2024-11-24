@@ -136,16 +136,30 @@ class MapImporter:
 
             for line in lines[2:]:
                 # format: 00000 0x00000000 "CJfild" "c_dust_fld_01.ddj"
-                _id, addr, map_name, file_name, *_ = line.split(" ")
+                _id, addr, *rest = line.split(" ")
+
+                if len(rest) == 2:
+                    map_name, file_name = rest
+                else:
+                    rest = " ".join(rest)
+                    map_name, file_name = rest.split('" "')
+                    if " {" in file_name:
+                        file_name = file_name.split(" {")[0]
 
                 _id = int(_id)
                 addr = int(addr, 16)
+                file_name = file_name.strip().strip('"')
+
+                if not file_name.endswith(".ddj"):
+                    print(line)
+                    print(file_name)
+                    raise ValueError("wrong filename")
 
                 value: TextureIndex = {
                     "_id": _id,
                     "addr": addr,
                     "map_name": map_name.strip('"'),
-                    "file_name": file_name.strip().strip('"'),
+                    "file_name": file_name,
                 }
 
                 result[_id] = value
@@ -221,14 +235,16 @@ class BlenderMapImporter:
             if previous_mix_node:
                 ntree.links.new(mix_node.inputs[6], previous_mix_node.outputs[2])
             else:
-                mix_node.inputs[6].default_value = (0,0,0,0) # type: ignore
+                mix_node.inputs[6].default_value = (0, 0, 0, 0)  # type: ignore
 
             previous_mix_node = mix_node
 
         principled = ntree.nodes["Principled BSDF"]
 
         assert previous_mix_node
-        ntree.links.new(principled.inputs['Base Color'], previous_mix_node.outputs[2])
+        ntree.links.new(principled.inputs["Base Color"], previous_mix_node.outputs[2])
+
+        principled.inputs[2].default_value = 1  # type: ignore
         return material
 
     def import_map(self):
@@ -269,7 +285,7 @@ class BlenderMapImporter:
 
             data = cast(bpy.types.Mesh, ob.data)
 
-            data.materials.append(material) # type: ignore
+            data.materials.append(material)  # type: ignore
 
             data.attributes.new("height", "FLOAT", "POINT")  # type: ignore
             data.attributes.new("scale", "INT", "POINT")  # type: ignore
@@ -318,14 +334,15 @@ class BlenderMapImporter:
                 tile_attr.data[tile_idx].value = tile
 
             if set_height_nodes:
-                geo_nodes = cast(bpy.types.NodesModifier , ob.modifiers.new("Height", "NODES")) # type: ignore
+                geo_nodes = cast(
+                    bpy.types.NodesModifier, ob.modifiers.new("Height", "NODES") # type: ignore
+                )  
                 geo_nodes.node_group = set_height_nodes
-                geo_nodes['Socket_4'] = material
+                geo_nodes["Socket_4"] = material
 
 
-            
 
-# set the path to your Silkroad_DATA-MAP/Map here
+# # set the path to your Silkroad_DATA-MAP/Map here
 map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
 
 b = BlenderMapImporter(map_path)
