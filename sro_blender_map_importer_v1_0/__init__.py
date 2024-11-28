@@ -21,7 +21,7 @@ from typing import Set, TypedDict, cast
 
 bl_info = {
     "name": "Blender Silkroad Map Importer",
-    "author": "fiverr.com/olivio_",
+    "author": "https://www.fiverr.com/olivio \n https://github.com/achillesdawn",
     "version": (1, 0, 0),
     "blender": (4, 3, 1),
     "description": "Import SilkRoad Online Maps (.m files) into blender",
@@ -310,6 +310,13 @@ class BlenderMapImporter:
 
         set_height_nodes = bpy.data.node_groups.get("set_height")
 
+        meshes: list[bpy.types.Object] = []
+
+        x_offset = int(path.stem)
+        y_offset = int(path.parent.stem)
+
+        print(f"{x_offset=} {y_offset=}")
+
         for map_block_idx, map_block in enumerate(map_blocks):
             bpy.ops.mesh.primitive_grid_add(  # type: ignore
                 x_subdivisions=16,
@@ -325,6 +332,7 @@ class BlenderMapImporter:
 
             assert ob
             ob.name = path.name
+            meshes.append(ob)
 
             data = cast(bpy.types.Mesh, ob.data)
 
@@ -383,25 +391,22 @@ class BlenderMapImporter:
                 )
                 geo_nodes.node_group = set_height_nodes
                 geo_nodes["Socket_4"] = material
+                geo_nodes["Socket_5"] = x_offset
+                geo_nodes["Socket_6"] = y_offset
+
+        assert len(meshes) > 0
+
+        for mesh in meshes:
+            mesh.select_set(True)
+
+        bpy.context.view_layer.objects.active = meshes[0]
+        bpy.ops.object.join()
+        bpy.context.active_object.name = path.name  # type: ignore
 
 
 class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
     height_scale: FloatProperty(name="height", default=1)  # type: ignore
     map_data_path: StringProperty(name="map_data_path", subtype="DIR_PATH")  # type: ignore
-
-    # id_: IntProperty(name="ID")  # type: ignore
-    # name: StringProperty(name="Name")  # type: ignore
-    # prompt: StringProperty(name="Prompt")  # type: ignore
-    # image: StringProperty(name="Image")  # type: ignore
-    # title: StringProperty(name="Title")  # type: ignore
-    # model_url: StringProperty(name="Url")  # type: ignore
-    # model_thumbnail: StringProperty(name="Thumbnail")  # type: ignore
-    # is_remeshed: BoolProperty(name="Remeshed", default=False)  # type: ignore
-    # format: StringProperty(name="Format")  # type: ignore
-    # is_3d: BoolProperty(name="3D", default=False)  # type: ignore
-    # task_id: StringProperty(name="Task ID")  # type: ignore
-    # created_at: StringProperty(name="Created")  # type: ignore
-    # is_favorite: BoolProperty(name="Favorite")  # type: ignore
 
 
 class BaseClass:
@@ -473,7 +478,7 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
         props = self.get_props()
         paths = [Path(self.directory, file.name) for file in self.files]
 
-        map_data_path = Path(props.map_data_path)
+        map_data_path = Path(bpy.path.abspath(props.map_data_path))
 
         b = BlenderMapImporter(map_data_path)
 
