@@ -11,6 +11,7 @@ from bpy_extras.io_utils import ImportHelper
 
 import addon_utils
 
+from time import perf_counter
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -160,6 +161,7 @@ class DDJTextureReader:
             with open(filepath.with_suffix(".dds"), "wb") as output:
                 output.write(data)
 
+
 class MapImporter:
     texture_map: dict[int, TextureIndex]
 
@@ -168,6 +170,7 @@ class MapImporter:
 
     @staticmethod
     def read_m_file(path: Path) -> list[MapBlock]:
+        start = perf_counter()
         with open(path, "rb") as f:
             header = f.read(12)
             print(header)
@@ -177,6 +180,8 @@ class MapImporter:
                 map_block = MapBlock(f)
                 map_blocks.append(map_block)
 
+            read_time = perf_counter() - start
+            print(f"read map block in {read_time}s")
             return map_blocks
 
     def read_tile2d_ifo(self):
@@ -353,7 +358,6 @@ class BlenderMapImporter:
             ob = bpy.context.active_object
 
             assert ob
-            ob.name = path.name
             meshes.append(ob)
 
             data = cast(bpy.types.Mesh, ob.data)
@@ -374,10 +378,10 @@ class BlenderMapImporter:
             height = cast(FloatAttribute, data.attributes["height"])
             scale_attr = cast(IntAttribute, data.attributes["scale"])
             texture = cast(IntAttribute, data.attributes["texture"])
-            brightness = cast(IntAttribute, data.attributes["brightness"])
+            # brightness = cast(IntAttribute, data.attributes["brightness"])
 
-            max_height = cast(FloatAttribute, data.attributes["max_height"])
-            min_height = cast(FloatAttribute, data.attributes["min_height"])
+            # max_height = cast(FloatAttribute, data.attributes["max_height"])
+            # min_height = cast(FloatAttribute, data.attributes["min_height"])
 
             texture_attributes: dict[int, FloatAttribute] = {}
             for texture_id in textures:
@@ -392,10 +396,11 @@ class BlenderMapImporter:
                 height.data[vertex_idx].value = map_vertex.height
                 scale_attr.data[vertex_idx].value = scale
                 texture.data[vertex_idx].value = texture_id
-                brightness.data[vertex_idx].value = map_vertex.brightness
 
-                max_height.data[vertex_idx].value = map_block.height_max
-                min_height.data[vertex_idx].value = map_block.height_min
+                # brightness.data[vertex_idx].value = map_vertex.brightness
+
+                # max_height.data[vertex_idx].value = map_block.height_max
+                # min_height.data[vertex_idx].value = map_block.height_min
 
                 texture_attributes[texture_id].data[vertex_idx].value = 1
 
@@ -406,29 +411,36 @@ class BlenderMapImporter:
             for tile_idx, tile in enumerate(map_block.tile_map):
                 tile_attr.data[tile_idx].value = tile
 
-            if set_height_nodes:
-                geo_nodes = cast(
-                    bpy.types.NodesModifier,
-                    ob.modifiers.new("Height", "NODES"),  # type: ignore
-                )
-                geo_nodes.node_group = set_height_nodes
-                geo_nodes["Socket_4"] = material
-                geo_nodes["Socket_5"] = x_offset
-                geo_nodes["Socket_6"] = y_offset
-
         assert len(meshes) > 0
 
         for mesh in meshes:
             mesh.select_set(True)
 
-        bpy.context.view_layer.objects.active = meshes[0]
+        ob = meshes[0]
+        ob.name = f"x: {x_offset}, y: {y_offset}"
+        bpy.context.view_layer.objects.active = ob
         bpy.ops.object.join()
-        bpy.context.active_object.name = path.name  # type: ignore
+
+        if set_height_nodes:
+            geo_nodes = cast(
+                bpy.types.NodesModifier,
+                ob.modifiers.new("Height", "NODES"),  # type: ignore
+            )
+            geo_nodes.node_group = set_height_nodes
+            geo_nodes["Socket_4"] = material
+            geo_nodes["Socket_5"] = x_offset
+            geo_nodes["Socket_6"] = y_offset
 
 
 class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
     height_scale: FloatProperty(name="height", default=1)  # type: ignore
     map_data_path: StringProperty(name="map_data_path", subtype="DIR_PATH")  # type: ignore
+
+    x_start: IntProperty(name="x_start", default=0)  # type: ignore
+    x_size: IntProperty(name="x_size", default=1)  # type: ignore
+
+    y_start: IntProperty(name="y_start", default=0)  # type: ignore
+    y_size: IntProperty(name="y_size", default=1)  # type: ignore
 
 
 class BaseClass:
@@ -494,6 +506,7 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
             filepath=filepath.as_posix(),
             directory=(path / inner_path).as_posix(),
             filename=nodes_name,
+            check_existing=True,
         )
 
     def execute(self, context):
@@ -508,6 +521,52 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
 
         for path in paths:
             b.import_map(path)
+
+        return {"FINISHED"}
+
+
+class SILKROAD_OT_IMPORT_SQUARE(BaseOperator):
+    bl_idname = "silkroad.import"
+    bl_label = "Import Map"
+    bl_description = "Import .m map files"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context | None) -> bool:
+        assert context
+        enabled_modes = ["OBJECT"]
+        return context.mode in enabled_modes
+
+    def append_nodes(self):
+        blender_path = "importer.blend"
+        path = Config.path / blender_path
+        inner_path = "NodeTree"
+        nodes_name = "set_height"
+
+        filepath = path / inner_path / nodes_name
+
+        bpy.ops.wm.append(
+            filepath=filepath.as_posix(),
+            directory=(path / inner_path).as_posix(),
+            filename=nodes_name,
+            check_existing=True,
+        )
+
+    def execute(self, context):
+        props = self.get_props()
+        
+
+        map_data_path = Path(bpy.path.abspath(props.map_data_path))
+
+        b = BlenderMapImporter(map_data_path)
+
+        self.append_nodes()
+
+        for y in range(props.y_start, props.y_start + props.y_size):
+            for x in range(props.x_start, props.x_start + props.x_size):
+                path = map_data_path / str(y) / (str(x) + ".m")
+                if path.exists():
+                    b.import_map(path)
 
         return {"FINISHED"}
 
@@ -529,13 +588,28 @@ class SILKROAD_PT_viewportSidePanel(BaseClass, bpy.types.Panel):
         col.label(text="MAP Data Dir", icon="RIGHTARROW_THIN")
         col.prop(props, "map_data_path", text="")
 
+        row = col.row()
+        row.prop(props, "x_start")
+        row.prop(props, "y_start")
+
+        row = col.row()
+        row.prop(props, "x_size")
+        row.prop(props, "y_size")
+
+        row = col.row()
+        row.operator(
+            SILKROAD_OT_IMPORT_SQUARE.bl_idname,
+            text="Import Square",
+            icon="NODE_TEXTURE",
+        )
+
         col.separator()
         col.operator(
             SILKROAD_OT_IMPORT.bl_idname, text="Import Map", icon="NODE_TEXTURE"
         )
 
 
-classes = [SILKROAD_PROPERTIES, SILKROAD_OT_IMPORT, SILKROAD_PT_viewportSidePanel]
+classes = [SILKROAD_PROPERTIES, SILKROAD_OT_IMPORT, SILKROAD_PT_viewportSidePanel, SILKROAD_OT_IMPORT_SQUARE]
 
 
 def set_properties():
