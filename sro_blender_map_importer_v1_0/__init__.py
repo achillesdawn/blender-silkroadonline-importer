@@ -143,6 +143,23 @@ class TextureIndex(TypedDict):
     file_name: str
 
 
+class DDJTextureReader:
+    def __init__(self) -> None:
+        pass
+
+    def convert(self, filepath: Path):
+        with open(filepath, "rb") as f:
+            header = f.read(12)
+            print(header)
+            texture_size, texture_type = struct.unpack("<II", f.read(8))
+
+            print(f"{texture_size=} {texture_type=}")
+
+            data = f.read(texture_size - 8)
+
+            with open(filepath.with_suffix(".dds"), "wb") as output:
+                output.write(data)
+
 class MapImporter:
     texture_map: dict[int, TextureIndex]
 
@@ -227,7 +244,12 @@ class BlenderMapImporter:
 
         texture_path = base_path / texture_data["file_name"]
 
-        image = bpy.data.images.load(texture_path.with_suffix(".dds").as_posix())
+        dds_path = texture_path.with_suffix(".dds")
+        if not dds_path.exists():
+            d = DDJTextureReader()
+            d.convert(texture_path)
+
+        image = bpy.data.images.load(dds_path.as_posix())
 
         return image
 
