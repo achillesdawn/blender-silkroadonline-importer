@@ -9,6 +9,8 @@ from bpy.props import (
 )
 from bpy_extras.io_utils import ImportHelper
 
+import addon_utils
+
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +44,12 @@ class Config:
     def get_addon_name():
         addon_path = Path(__file__).resolve().parent.stem
         return addon_path
+
+
+for mod in addon_utils.modules():  # type: ignore
+    if mod.bl_info["name"] == bl_info["name"]:
+        filepath = mod.__file__
+        Config.path = Path(filepath).parent
 
 
 FLAG_ENVIRONMENT = "<IH"
@@ -439,7 +447,7 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
         options={"HIDDEN", "SKIP_SAVE"},
     )
 
-    directory: StringProperty(subtype="DIR_PATH") # type: ignore
+    directory: StringProperty(subtype="DIR_PATH")  # type: ignore
 
     @classmethod
     def poll(cls, context: bpy.types.Context | None) -> bool:
@@ -448,10 +456,9 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
         return context.mode in enabled_modes
 
     def append_nodes(self):
-
-        blender_path = 'importer.blend'
+        blender_path = "importer.blend"
         path = Config.path / blender_path
-        inner_path = 'NodeTree'
+        inner_path = "NodeTree"
         nodes_name = "set_height"
 
         filepath = path / inner_path / nodes_name
@@ -471,7 +478,7 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
         b = BlenderMapImporter(map_data_path)
 
         self.append_nodes()
-        
+
         for path in paths:
             b.import_map(path)
 
