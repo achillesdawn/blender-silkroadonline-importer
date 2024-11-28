@@ -207,9 +207,12 @@ class MapImporter:
 
 class BlenderMapImporter:
     texture_map: dict[int, TextureIndex]
+    map_importer: MapImporter
 
     def __init__(self, map_path: Path) -> None:
         self.base_path = map_path
+        self.map_importer = MapImporter(self.base_path)
+        self.texture_map = self.map_importer.read_tile2d_ifo()
 
     def create_image(self, texture_id: int, base_path: Path):
         texture_data = self.texture_map[texture_id]
@@ -283,23 +286,19 @@ class BlenderMapImporter:
         principled.inputs[2].default_value = 1  # type: ignore
         return material
 
-    def import_map(self):
+    def import_map(self, path: Path):
         assert bpy.context
 
-        m = MapImporter(self.base_path)
-        self.texture_map = m.read_tile2d_ifo()
+        map_blocks = self.map_importer.read_m_file(path)
 
         textures: Set[int] = set()
-
-        m_file = map_path / "96" / "168.m"
-        map_blocks = m.read_m_file(m_file)
 
         for map_block in map_blocks:
             for map_vertex in map_block.map_vertices:
                 texture_id, scale = map_vertex.get_texture_data()
                 textures.add(texture_id)
 
-        material = self.create_material(m_file.stem, textures)
+        material = self.create_material(path.stem, textures)
 
         set_height_nodes = bpy.data.node_groups.get("set_height")
 
@@ -317,7 +316,7 @@ class BlenderMapImporter:
             ob = bpy.context.active_object
 
             assert ob
-            ob.name = m_file.name
+            ob.name = path.name
 
             data = cast(bpy.types.Mesh, ob.data)
 
@@ -380,6 +379,7 @@ class BlenderMapImporter:
 
 class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
     height_scale: FloatProperty(name="height", default=1)  # type: ignore
+    map_data_path: StringProperty(name="map_data_path", subtype="DIR_PATH")  # type: ignore
 
     # id_: IntProperty(name="ID")  # type: ignore
     # name: StringProperty(name="Name")  # type: ignore
@@ -393,7 +393,6 @@ class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
     # is_3d: BoolProperty(name="3D", default=False)  # type: ignore
     # task_id: StringProperty(name="Task ID")  # type: ignore
     # created_at: StringProperty(name="Created")  # type: ignore
-    # filepath: StringProperty(name="filepath", subtype="FILE_PATH")  # type: ignore
     # is_favorite: BoolProperty(name="Favorite")  # type: ignore
 
 
@@ -448,17 +447,33 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
         enabled_modes = ["OBJECT"]
         return context.mode in enabled_modes
 
+    def append_nodes(self):
+
+        blender_path = 'importer.blend'
+        path = Config.path / blender_path
+        inner_path = 'NodeTree'
+        nodes_name = "set_height"
+
+        filepath = path / inner_path / nodes_name
+
+        bpy.ops.wm.append(
+            filepath=filepath.as_posix(),
+            directory=(path / inner_path).as_posix(),
+            filename=nodes_name,
+        )
+
     def execute(self, context):
-
+        props = self.get_props()
         paths = [Path(self.directory, file.name) for file in self.files]
-        print(paths)
-            
 
+        map_data_path = Path(props.map_data_path)
 
-        # map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
+        b = BlenderMapImporter(map_data_path)
 
-        # b = BlenderMapImporter(map_path)
-        # b.import_map()
+        self.append_nodes()
+        
+        for path in paths:
+            b.import_map(path)
 
         return {"FINISHED"}
 
@@ -475,9 +490,13 @@ class SILKROAD_PT_viewportSidePanel(BaseClass, bpy.types.Panel):
         layout = self.layout
         props = self.get_props()
 
-        row = layout.row()
+        col = layout.column()
 
-        row.operator(
+        col.label(text="MAP Data Dir", icon="RIGHTARROW_THIN")
+        col.prop(props, "map_data_path", text="")
+
+        col.separator()
+        col.operator(
             SILKROAD_OT_IMPORT.bl_idname, text="Import Map", icon="NODE_TEXTURE"
         )
 
