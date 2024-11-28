@@ -1,11 +1,47 @@
 import bpy
-from bpy.types import FloatAttribute, IntAttribute
+from bpy.types import FloatAttribute, IntAttribute, OperatorFileListElement
+from bpy.props import (
+    StringProperty,
+    FloatProperty,
+    IntProperty,
+    BoolProperty,
+    CollectionProperty,
+)
+from bpy_extras.io_utils import ImportHelper
+
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 from io import BufferedReader
 from math import floor
+
 from typing import Set, TypedDict, cast
+
+bl_info = {
+    "name": "Blender Silkroad Map Importer",
+    "author": "fiverr.com/olivio_",
+    "version": (1, 0, 0),
+    "blender": (4, 3, 1),
+    "description": "Import SilkRoad Online Maps (.m files) into blender",
+    "category": "Import-Export",
+}
+
+
+class Config:
+    normal_name = bl_info["name"]
+    caps_name = "SILKROAD"
+    lower_case_name = caps_name.lower()
+    addon_global_var_name = "sro"
+
+    panel_prefix = caps_name + "_PT_"
+    operator_prefixz = caps_name + "_OT_"
+
+    path: Path
+
+    @staticmethod
+    def get_addon_name():
+        addon_path = Path(__file__).resolve().parent.stem
+        return addon_path
 
 
 FLAG_ENVIRONMENT = "<IH"
@@ -153,7 +189,7 @@ class MapImporter:
                 if not file_name.endswith(".ddj"):
                     print(line)
                     print(file_name)
-                    raise ValueError("wrong filename")
+                    raise ValueError("problem parsing tile2d.ifo")
 
                 value: TextureIndex = {
                     "_id": _id,
@@ -335,15 +371,151 @@ class BlenderMapImporter:
 
             if set_height_nodes:
                 geo_nodes = cast(
-                    bpy.types.NodesModifier, ob.modifiers.new("Height", "NODES") # type: ignore
-                )  
+                    bpy.types.NodesModifier,
+                    ob.modifiers.new("Height", "NODES"),  # type: ignore
+                )
                 geo_nodes.node_group = set_height_nodes
                 geo_nodes["Socket_4"] = material
 
 
+class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
+    height_scale: FloatProperty(name="height", default=1)  # type: ignore
 
-# # set the path to your Silkroad_DATA-MAP/Map here
-map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
+    # id_: IntProperty(name="ID")  # type: ignore
+    # name: StringProperty(name="Name")  # type: ignore
+    # prompt: StringProperty(name="Prompt")  # type: ignore
+    # image: StringProperty(name="Image")  # type: ignore
+    # title: StringProperty(name="Title")  # type: ignore
+    # model_url: StringProperty(name="Url")  # type: ignore
+    # model_thumbnail: StringProperty(name="Thumbnail")  # type: ignore
+    # is_remeshed: BoolProperty(name="Remeshed", default=False)  # type: ignore
+    # format: StringProperty(name="Format")  # type: ignore
+    # is_3d: BoolProperty(name="3D", default=False)  # type: ignore
+    # task_id: StringProperty(name="Task ID")  # type: ignore
+    # created_at: StringProperty(name="Created")  # type: ignore
+    # filepath: StringProperty(name="filepath", subtype="FILE_PATH")  # type: ignore
+    # is_favorite: BoolProperty(name="Favorite")  # type: ignore
 
-b = BlenderMapImporter(map_path)
-b.import_map()
+
+class BaseClass:
+    @staticmethod
+    def get_props() -> SILKROAD_PROPERTIES:
+        return getattr(bpy.context.scene, Config.addon_global_var_name)  # type: ignore
+
+    @staticmethod
+    def get_preferences() -> SILKROAD_PROPERTIES:
+        return bpy.context.preferences.addons[Config.get_addon_name()].preferences
+
+
+class BaseOperator(BaseClass, bpy.types.Operator):
+    @staticmethod
+    def select_and_make_active(ob: bpy.types.Object):
+        for ob_to_deselect in bpy.data.objects:
+            if ob_to_deselect == ob:
+                continue
+            ob_to_deselect.select_set(False)
+
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
+
+        print(f"[ Status ] {ob.name} set to Active Object")
+
+
+class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
+    bl_idname = "silkroad.import"
+    bl_label = "Import Map"
+    bl_description = "Import .m map files"
+    bl_options = {"REGISTER", "UNDO"}
+
+    filename_ext = ".m"
+    filter_glob: StringProperty(
+        default="*.m",
+        options={"HIDDEN"},
+        maxlen=255,  # Max internal buffer length, longer would be clamped.
+    )  # type: ignore
+
+    files: CollectionProperty(
+        name="files",
+        type=bpy.types.OperatorFileListElement,  # type: ignore
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
+    directory: StringProperty(subtype="DIR_PATH") # type: ignore
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context | None) -> bool:
+        assert context
+        enabled_modes = ["OBJECT"]
+        return context.mode in enabled_modes
+
+    def execute(self, context):
+
+        paths = [Path(self.directory, file.name) for file in self.files]
+        print(paths)
+            
+
+
+        # map_path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
+
+        # b = BlenderMapImporter(map_path)
+        # b.import_map()
+
+        return {"FINISHED"}
+
+
+class SILKROAD_PT_viewportSidePanel(BaseClass, bpy.types.Panel):
+    bl_idname = Config.panel_prefix + "viewportSidePanel"
+    bl_label = Config.normal_name
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_context = "objectmode"
+    bl_category = "SRO"
+
+    def draw(self, context):
+        layout = self.layout
+        props = self.get_props()
+
+        row = layout.row()
+
+        row.operator(
+            SILKROAD_OT_IMPORT.bl_idname, text="Import Map", icon="NODE_TEXTURE"
+        )
+
+
+classes = [SILKROAD_PROPERTIES, SILKROAD_OT_IMPORT, SILKROAD_PT_viewportSidePanel]
+
+
+def set_properties():
+    setattr(
+        bpy.types.Scene,
+        Config.addon_global_var_name,
+        bpy.props.PointerProperty(
+            type=SILKROAD_PROPERTIES,
+        ),
+    )
+
+
+def del_properties():
+    delattr(bpy.types.Scene, Config.addon_global_var_name)
+
+
+def register():
+    from bpy.utils import register_class
+
+    for cls in classes:
+        register_class(cls)
+
+    set_properties()
+
+
+def unregister():
+    from bpy.utils import unregister_class
+
+    for cls in reversed(classes):
+        unregister_class(cls)
+
+    del_properties()
+
+
+if __name__ == "__main__":
+    register()
