@@ -273,13 +273,18 @@ class BlenderMapImporter:
         )
         attribute_node.attribute_name = f"texture_{texture_id}"
 
+        uv_node = cast(
+            bpy.types.ShaderNodeAttribute, ntree.nodes.new("ShaderNodeAttribute")
+        )
+        uv_node.attribute_name = "UVMap"
+
         mix_node = cast(bpy.types.ShaderNodeMix, ntree.nodes.new("ShaderNodeMix"))
         mix_node.data_type = "RGBA"
         mix_node.label = str(texture_id)
         mix_node.name = str(texture_id)
 
         ntree.links.new(mix_node.inputs[0], attribute_node.outputs[2])
-        return attribute_node, mix_node
+        return attribute_node, mix_node, uv_node
 
     def create_material(self, material_name: str, textures: Set[int]):
         material = bpy.data.materials.new(material_name)
@@ -300,11 +305,13 @@ class BlenderMapImporter:
             image_node.name = str(texture_id)
             image_node.label = str(texture_id)
 
-            attribute_node, mix_node = self.create_attribute_mix(ntree, texture_id)
+            attribute_node, mix_node, uv_node = self.create_attribute_mix(ntree, texture_id)
             attribute_node.location = ((idx * 200) - 400, idx * 200)
             mix_node.location = ((idx * 200) + 400, idx * 200)
+            uv_node.location = ((idx * 200) - 400, (idx * 200) - 200)
 
             ntree.links.new(mix_node.inputs[7], image_node.outputs[0])
+            ntree.links.new(image_node.inputs[0], uv_node.outputs[1])
 
             if previous_mix_node:
                 ntree.links.new(mix_node.inputs[6], previous_mix_node.outputs[2])
@@ -526,7 +533,7 @@ class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
 
 
 class SILKROAD_OT_IMPORT_SQUARE(BaseOperator):
-    bl_idname = "silkroad.import"
+    bl_idname = "silkroad.import_square"
     bl_label = "Import Map"
     bl_description = "Import .m map files"
     bl_options = {"REGISTER", "UNDO"}
