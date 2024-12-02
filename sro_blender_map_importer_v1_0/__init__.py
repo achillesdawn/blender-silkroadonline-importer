@@ -320,12 +320,11 @@ class BlenderMapImporter:
 
             previous_mix_node = mix_node
 
-        principled = ntree.nodes["Principled BSDF"]
+        output_node = ntree.nodes["Material Output"]
 
         assert previous_mix_node
-        ntree.links.new(principled.inputs["Base Color"], previous_mix_node.outputs[2])
+        ntree.links.new(output_node.inputs[0], previous_mix_node.outputs[2])
 
-        principled.inputs[2].default_value = 1  # type: ignore
         return material
 
     def import_map(self, path: Path):
@@ -427,6 +426,14 @@ class BlenderMapImporter:
         ob.name = f"x: {x_offset}, y: {y_offset}"
         bpy.context.view_layer.objects.active = ob
         bpy.ops.object.join()
+
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.remove_doubles()
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.shade_auto_smooth()
+
+
 
         if set_height_nodes:
             geo_nodes = cast(
