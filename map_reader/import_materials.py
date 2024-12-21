@@ -9,7 +9,7 @@ from ddj import DDJTextureReader
 from pathlib import Path
 
 
-class NodeTools:
+class NodeTool:
     @staticmethod
     def create_image_node(
         ntree: bpy.types.NodeTree, image: bpy.types.Image
@@ -52,22 +52,31 @@ if __name__ == "__main__":
         )
     )
 
-    d = DDJTextureReader()
     for material in b.materials:
+        print(material)
+
+        m = bpy.data.materials.get(material.name)
+        if m is not None:
+            continue
+
         diffuse_path = b.path / material.diffuse.name
+
+        if diffuse_path.suffix not in [".dds", ".ddj"]:
+            print("unexpected texture path:", diffuse_path.as_posix())
+            continue
 
         if not diffuse_path.exists():
             raise Exception("diffuse path does not exist", diffuse_path)
 
-        dds = d.convert_ddj_to_dds(diffuse_path)
+        dds_path = DDJTextureReader.convert_ddj_to_dds(diffuse_path)
 
-        # m = bpy.data.materials.get(material.name)
-        # if m is not None:
-        #     continue
+        image = bpy.data.images.load(filepath=dds_path.as_posix(), check_existing=True)
 
-        # m = bpy.data.materials.new(material.name)
-        # m.use_nodes = True
+        m = bpy.data.materials.new(material.name)
+        m.use_nodes = True
 
-        # material.diffuse.name
+        ntree = m.node_tree
 
-        # ntree = m.node_tree
+        assert ntree
+
+        NodeTool.add_nodes(ntree, image)

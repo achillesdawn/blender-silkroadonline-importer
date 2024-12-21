@@ -3,10 +3,9 @@ import struct
 
 
 class DDJTextureReader:
-    def __init__(self) -> None:
-        pass
-
-    def convert_ddj_to_dds(self, filepath: Path) -> Path:
+    
+    @staticmethod
+    def convert_ddj_to_dds(filepath: Path) -> Path:
         if filepath.with_suffix(".dds").exists():
             return filepath.with_suffix(".dds")
 
