@@ -6,7 +6,10 @@ class DDJTextureReader:
     def __init__(self) -> None:
         pass
 
-    def read(self, filepath: Path):
+    def convert_ddj_to_dds(self, filepath: Path) -> Path:
+        if filepath.with_suffix(".dds").exists():
+            return filepath.with_suffix(".dds")
+
         with open(filepath, "rb") as f:
             header = f.read(12)
             print(header)
@@ -19,7 +22,10 @@ class DDJTextureReader:
             with open(filepath.with_suffix(".dds"), "wb") as output:
                 output.write(data)
 
+            return filepath.with_suffix(".dds")
 
-d = DDJTextureReader()
-ddj_path = Path("Silkroad_DATA-MAP/Map/tile2d/oakk_dust_earth03.ddj")
-d.read(ddj_path)
+
+if __name__ == "__main__":
+    d = DDJTextureReader()
+    ddj_path = Path("Silkroad_DATA-MAP/Map/tile2d/oakk_dust_earth03.ddj")
+    d.convert_ddj_to_dds(ddj_path)
