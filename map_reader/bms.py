@@ -2,8 +2,7 @@ import bpy
 import bmesh
 from pathlib import Path
 import struct
-import os
-import math
+
 from typing import cast
 
 
@@ -317,7 +316,7 @@ def blender_set_mode(NewMode):
         bpy.ops.object.mode_set(mode=NewMode)
 
 
-def process_data(path: Path, data, name):
+def import_bms(path: Path, data, name):
     context = cast(bpy.types.Context, bpy.context)
     # Create object
     blender_set_mode("OBJECT")
@@ -382,7 +381,9 @@ def process_data(path: Path, data, name):
         for vert in bm.verts:
             # Set vertex info
             vert[vertex_clothes_layer] = (
-                vertex_clothes[vert.index]["distance"] if vert.index in vertex_clothes else 0.0
+                vertex_clothes[vert.index]["distance"]
+                if vert.index in vertex_clothes
+                else 0.0
             )
 
     # Add Cloth from edges
@@ -405,40 +406,14 @@ def process_data(path: Path, data, name):
     blender_set_mode("OBJECT")
     mat = bpy.data.materials.get(data["material"])
     if not mat:
-        mat = bpy.data.materials.new(name=data["material"])
-        mat.use_nodes = True
-        mat.node_tree.nodes.clear()
-    # Set material
-    if ob.data.materials:
-        ob.data.materials[0] = mat
+        raise Exception("material not found")
+
+    if ob_data.materials:
+        ob_data.materials[0] = mat
     else:
-        ob.data.materials.append(mat)
-    # Set base nodes, link them and set texture if exists
-    mat.use_nodes = True
+        ob_data.materials.append(mat)
 
-    assert mat.node_tree
 
-    nodes = mat.node_tree.nodes
-    output = (
-        nodes["ShaderNodeOutputMaterial"]
-        if "ShaderNodeOutputMaterial" in nodes
-        else nodes.new("ShaderNodeOutputMaterial")
-    )
-    output.name = "ShaderNodeOutputMaterial"
-    output.location = (380, 0)
-    bsdf = (
-        nodes["ShaderNodeBsdfPrincipled"]
-        if "ShaderNodeBsdfPrincipled" in nodes
-        else nodes.new("ShaderNodeBsdfPrincipled")
-    )
-    bsdf.name = "ShaderNodeBsdfPrincipled"
-    bsdf.location = (100, 0)
-    mat.node_tree.links.new(output.inputs["Surface"], bsdf.outputs["BSDF"])
-    
-    data["material_filepath"] = None
-
-    material_path = path.parent / "mtrl"
-    
 #     if os.path.exists(self.setting_material_filepath):
 #         with open(self.setting_material_filepath, "rb") as f:
 #             br = BinaryReader(f.read())
@@ -607,10 +582,11 @@ def process_data(path: Path, data, name):
 
 
 if __name__ == "__main__":
-    path = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Data/prim/mesh/nature/asia minor/tree/asiaminor_tree01_1.bms")
+    path = Path(
+        "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Data/prim/mesh/nature/asia minor/tree/asiaminor_tree01_1.bms"
+    )
     data = load_bms(path)
 
     print(data)
 
-    process_data(path, data, "hello")
-
+    import_bms(path, data, "hello")

@@ -25,7 +25,13 @@ class Diffuse:
 class BMTMaterial:
     name: str
     colors: list[RGB]
-    options: bytes
+
+    options: tuple[bool]
+    has_alpha: bool
+    use_tint: bool
+    has_diffuse: bool
+    has_bump: bool
+
     diffuse: Diffuse
 
 
@@ -47,7 +53,6 @@ class BMT:
         return d
 
     def read(self, path: Path):
-
         print("[ BMTReader ] reading", path)
 
         self.path = path.parent
@@ -72,17 +77,36 @@ class BMT:
                     colors.append(RGB(r, g, b, a))
 
                 _unknown_flag = struct.unpack("<f", f.read(4))[0]
-                options = f.read(4)
+                options = struct.unpack("<I", f.read(4))[0]
+
+                has_tint: bool = options & 1 << 6 != 0
+                has_diffuse: bool = options & 1 << 8 != 0
+                has_alpha: bool = options & 1 << 9 != 0
+                has_bump: bool = options & 1 << 13 != 0
 
                 diffuse = self.read_diffuse(f)
 
-                material = BMTMaterial(material_name.decode(), colors, options, diffuse)
+                material = BMTMaterial(
+                    material_name.decode(),
+                    colors,
+                    options,
+                    has_alpha,
+                    has_tint,
+                    has_diffuse,
+                    has_bump,
+                    diffuse=diffuse,
+                )
+
                 print(material)
+
                 self.materials.append(material)
 
         print("[ BMTReader ] succesful read")
 
 
-
-
-
+if __name__ == "__main__":
+    b = BMT()
+    path = Path(
+        "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Data/prim/mtrl/bldg/europe/constantinople/euro_constan_inn01.bmt"
+    )
+    b.read(path)

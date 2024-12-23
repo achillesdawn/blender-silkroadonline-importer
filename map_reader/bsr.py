@@ -80,12 +80,14 @@ class BSRReader:
         n: int = struct.unpack("<I", f.read(4))[0]
         for _ in range(n):
             name_length = struct.unpack("<I", f.read(4))[0]
-            mesh_name = f.read(name_length)
+            mesh_name = f.read(name_length).decode()
+            mesh_name = mesh_name.replace("\\", "/")
+
             flag = 0
             if self.is_prim_mesh:
                 flag: int = struct.unpack("<I", f.read(4))[0]
 
-            mesh = Mesh(mesh_name.decode(), flag=flag)
+            mesh = Mesh(mesh_name, flag=flag)
             self.meshes.append(mesh)
 
     def read(self, filepath: Path):

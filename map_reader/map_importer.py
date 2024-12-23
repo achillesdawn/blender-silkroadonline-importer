@@ -8,9 +8,11 @@ from bsr import BSRReader
 from ofile import MapBlock
 from object_list import read_object_list
 from bmt import BMT, BMTMaterial
+from ofile import OReader
+from bms import load_bms, import_bms
+
 from ddj import DDJTextureReader
 from node_tool import NodeTool
-from ofile import OReader
 
 from pathlib import Path
 
@@ -50,7 +52,7 @@ class BMTImporter(BMT):
 
         assert ntree
 
-        NodeTool.add_nodes(ntree, image)
+        NodeTool.add_nodes(ntree, image, material.has_alpha)
 
 
 class MapImporter:
@@ -76,11 +78,6 @@ class MapImporter:
             for lod in map_block.lods:
                 if len(lod) > 0:
                     for ob in lod:
-                        if ob.ob_id in read_ids:
-                            continue
-                        else:
-                            read_ids.add(ob.ob_id)
-
                         resource = self.resources[ob.ob_id]
                         resource_path = DATA_PATH / resource
 
@@ -99,6 +96,15 @@ class MapImporter:
 
                             for material in bmt.materials:
                                 bmt.import_material(material)
+
+                        for mesh in self.bsr.meshes:
+                            mesh_path = DATA_PATH / mesh.name
+
+                            if not mesh_path.exists():
+                                raise Exception("not exists", mesh_path)
+
+                            data = load_bms(mesh_path)
+                            import_bms(mesh_path, data, mesh_path.stem)
 
     def read(self):
         o = OReader()

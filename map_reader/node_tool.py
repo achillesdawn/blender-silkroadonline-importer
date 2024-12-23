@@ -18,7 +18,7 @@ class NodeTool:
         return image_node
 
     @classmethod
-    def add_nodes(cls, ntree: bpy.types.NodeTree, img: bpy.types.Image):
+    def add_nodes(cls, ntree: bpy.types.NodeTree, img: bpy.types.Image, alpha: bool = False):
         principled = ntree.nodes["Principled BSDF"]
         base_color_socket = principled.inputs["Base Color"]
         image_node = cls.create_image_node(ntree, img)
@@ -32,3 +32,6 @@ class NodeTool:
         ntree.links.new(coord.outputs[2], mapping.inputs[0])
         ntree.links.new(mapping.outputs[0], image_node.inputs[0])
         ntree.links.new(image_node.outputs[0], base_color_socket)
+
+        if alpha:
+            ntree.links.new(principled.inputs["Alpha"], image_node.outputs[1])
