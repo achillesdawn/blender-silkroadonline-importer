@@ -3,14 +3,9 @@ from pathlib import Path
 from io import BufferedReader
 from dataclasses import dataclass
 
-from bsr import BSRReader
-from read_object_list import read_object_list
 
 OBJ_ID = "<I"
 VECTOR_3 = "<fff"
-
-
-DATA_PATH = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Data")
 
 
 @dataclass
@@ -84,7 +79,6 @@ class OReader:
         self.map_blocks.append(m)
 
     def read(self, filepath: Path):
-
         print("[ OReader ] reading", filepath)
 
         with open(filepath, "rb") as f:
@@ -138,13 +132,7 @@ class O2Reader(OReader):
         self.map_blocks.append(m)
 
 
-
-
-
 if __name__ == "__main__":
-
-
-
     o2 = O2Reader()
 
     test_path = Path(

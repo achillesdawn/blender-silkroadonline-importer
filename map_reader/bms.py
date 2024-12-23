@@ -305,42 +305,44 @@ def load_bms(filepath: Path):
     return data
 
 
-def BlenderGetMode():
-    assert bpy.context
-    return bpy.context.object.mode if bpy.context.object else "OBJECT"
 
-
-def blender_set_mode(NewMode):
-    mode = BlenderGetMode()
-    if mode != NewMode:
-        bpy.ops.object.mode_set(mode=NewMode)
-
-
-def import_bms(path: Path, data, name):
+def import_bms(path: Path, data):
+    
     context = cast(bpy.types.Context, bpy.context)
-    # Create object
-    blender_set_mode("OBJECT")
+    if context.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    if bpy.data.objects.get(data["name"]):
+        return cast(bpy.types.Object, bpy.data.objects[data["name"]])
+    
+    imported_collection = bpy.data.collections.get("bms_import")
+    if imported_collection is None:
+        imported_collection = bpy.data.collections.new("bms_import")
+        context.collection.children.link(imported_collection)
+
+
     mesh = bpy.data.meshes.new("Mesh")
     ob = bpy.data.objects.new(data["name"], mesh)
-    context.collection.objects.link(ob)
-    context.view_layer.objects.active = ob  # Set active object to work with
+
+    imported_collection.objects.link(ob)
+
     ob.select_set(True)
+    context.view_layer.objects.active = ob
+
     ob_data = cast(bpy.types.Mesh, ob.data)
 
-    # Create mesh
     faces = data["faces"]
     mesh.from_pydata(data["vertices"], [], faces)
 
-    # Add Vertex Groups
-    vertexGroups = data["vertex_groups"]
-    for vg in vertexGroups:
+    vertex_groups = data["vertex_groups"]
+    for vg in vertex_groups:
         group = ob.vertex_groups.new(name=vg["name"])
         group.add(vg["vertex_index"], 1, "ADD")
 
     # Set weight from vertices
     for vert in ob_data.vertices:
         for g in vert.groups:
-            vg = vertexGroups[g.group]
+            vg = vertex_groups[g.group]
             for i, index in enumerate(vg["vertex_index"]):
                 if vert.index == index:
                     g.weight = vg["vertex_weight"][i]
@@ -370,8 +372,8 @@ def import_bms(path: Path, data, name):
                 # Set UV values
                 uv_layer.data[loopindex].uv = uv
 
-    # Create data layers thorugh bmesh
-    blender_set_mode("EDIT")
+    
+    bpy.ops.object.mode_set(mode="EDIT")
     bm = bmesh.from_edit_mesh(mesh)
 
     # Add Cloth from vertices
@@ -402,8 +404,8 @@ def import_bms(path: Path, data, name):
         # Save property - cloth settings
         mesh["SilkroadOnline_ClothSettings"] = data["cloth_settings"]
 
-    # Assign material or create it
-    blender_set_mode("OBJECT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    
     mat = bpy.data.materials.get(data["material"])
     if not mat:
         raise Exception("material not found")
@@ -412,6 +414,8 @@ def import_bms(path: Path, data, name):
         ob_data.materials[0] = mat
     else:
         ob_data.materials.append(mat)
+
+    return ob
 
 
 #     if os.path.exists(self.setting_material_filepath):
@@ -589,4 +593,4 @@ if __name__ == "__main__":
 
     print(data)
 
-    import_bms(path, data, "hello")
+    import_bms(path, data)
