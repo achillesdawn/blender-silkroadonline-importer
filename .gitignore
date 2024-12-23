@@ -2,4 +2,4 @@
 Silkroad_DATA-MAP
 *.blend1
 *.zip
-__pycache__
+__pycache__/

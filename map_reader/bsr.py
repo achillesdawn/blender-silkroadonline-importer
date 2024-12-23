@@ -7,7 +7,7 @@ POINTERS = "<IIIIIIII"
 
 
 @dataclass
-class Material:
+class BSRMaterial:
     _id: int
     name: str
 
@@ -27,7 +27,7 @@ class Bbox:
 
 class BSRReader:
     bbox_info: Bbox
-    materials: list[Material]
+    materials: list[BSRMaterial]
     meshes: list[Mesh]
 
     def __init__(self) -> None:
@@ -68,9 +68,10 @@ class BSRReader:
         n: int = struct.unpack("<I", f.read(4))[0]
         for _ in range(n):
             material_id, name_length = struct.unpack("<II", f.read(8))
-            material_name = f.read(name_length)
+            material_name = f.read(name_length).decode()
+            material_name = material_name.replace("\\", "/")
             # print(material_name)
-            material = Material(material_id, material_name.decode())
+            material = BSRMaterial(material_id, material_name)
             self.materials.append(material)
 
     def read_meshes(self, f: BufferedReader):
@@ -88,7 +89,10 @@ class BSRReader:
             self.meshes.append(mesh)
 
     def read(self, filepath: Path):
-        print("reading", filepath)
+
+        self.__init__()
+
+        print("[ BSRReader ] reading", filepath)
 
         with open(filepath, "rb") as f:
             _header = f.read(12)
@@ -118,6 +122,8 @@ class BSRReader:
             self.read_materials(f)
 
             self.read_meshes(f)
+            
+        print("[ BSRReader ] succesful read")
 
 
 if __name__ == "__main__":

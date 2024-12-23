@@ -22,7 +22,7 @@ class Diffuse:
 
 
 @dataclass
-class Material:
+class BMTMaterial:
     name: str
     colors: list[RGB]
     options: bytes
@@ -30,7 +30,7 @@ class Material:
 
 
 class BMT:
-    materials: list[Material]
+    materials: list[BMTMaterial]
     path: Path
 
     def __init__(self) -> None:
@@ -47,6 +47,9 @@ class BMT:
         return d
 
     def read(self, path: Path):
+
+        print("[ BMTReader ] reading", path)
+
         self.path = path.parent
 
         with open(path, "rb") as f:
@@ -73,9 +76,11 @@ class BMT:
 
                 diffuse = self.read_diffuse(f)
 
-                material = Material(material_name.decode(), colors, options, diffuse)
+                material = BMTMaterial(material_name.decode(), colors, options, diffuse)
                 print(material)
                 self.materials.append(material)
+
+        print("[ BMTReader ] succesful read")
 
 
 

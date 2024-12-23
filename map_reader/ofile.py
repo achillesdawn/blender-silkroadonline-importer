@@ -4,6 +4,7 @@ from io import BufferedReader
 from dataclasses import dataclass
 
 from bsr import BSRReader
+from read_object_list import read_object_list
 
 OBJ_ID = "<I"
 VECTOR_3 = "<fff"
@@ -83,6 +84,9 @@ class OReader:
         self.map_blocks.append(m)
 
     def read(self, filepath: Path):
+
+        print("[ OReader ] reading", filepath)
+
         with open(filepath, "rb") as f:
             _header = f.read(12)
 
@@ -90,7 +94,7 @@ class OReader:
                 for row in range(6):
                     self.read_map_block(f, row, col)
 
-            print("DONE")
+            print("[ OReader ] sucessful read")
 
 
 class O2Reader(OReader):
@@ -134,64 +138,17 @@ class O2Reader(OReader):
         self.map_blocks.append(m)
 
 
-def read_object_list(path: Path) -> dict[int, str]:
-    resources: dict[int, str] = {}
-
-    with open(path, "rb") as f:
-        lines = f.readlines()
-
-    header = lines[0]
-    num_objects = lines[1]
-
-    print(header, num_objects)
-
-    for line in lines[2:]:
-        res_id, rest = line.split(b" ", 1)
-        name = rest.split(b" ", 1)[-1]
-
-        resources[int(res_id)] = (
-            name.decode("latin-1").strip().strip('"').replace("\\", "/")
-        )
-
-    return resources
 
 
 
 if __name__ == "__main__":
-    resources = read_object_list(
-        path=Path(
-            "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/object.ifo"
-        )
-    )
 
-    o = OReader()
+
+
+    o2 = O2Reader()
 
     test_path = Path(
-        "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/64/68.o"
+        "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/64/68.o2"
     )
 
-    bsr = BSRReader()
-
-    o.read(test_path)
-    for map_block in o.map_blocks:
-        for lod in map_block.lods:
-            if len(lod) > 0:
-                for ob in lod:
-                    resource = resources[ob.ob_id]
-                    resource_path = DATA_PATH / resource
-
-                    if not resource_path.exists():
-                        raise Exception("resource path not found", resource_path)
-
-                    bsr.read(resource_path)
-
-                    for material in bsr.materials:
-                        print(material)
-
-    # o2 = O2Reader()
-
-    # test_path = Path(
-    #     "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/64/68.o2"
-    # )
-
-    # o2.read(test_path)
+    o2.read(test_path)
