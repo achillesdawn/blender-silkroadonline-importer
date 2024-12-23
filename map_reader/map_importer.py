@@ -98,6 +98,9 @@ class MapImporter:
                             for material in bmt.materials:
                                 bmt.import_material(material)
 
+                        if bpy.data.collections.get(f"{map_ob.uid}"):
+                            continue
+
                         obs: list[bpy.types.Object] = []
                         for mesh in self.bsr.meshes:
                             mesh_path = DATA_PATH / mesh.name
