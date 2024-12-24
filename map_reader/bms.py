@@ -1,7 +1,9 @@
 import bpy
+from mathutils import Vector, Matrix
 import bmesh
 from pathlib import Path
 import struct
+from math import isnan
 
 from typing import cast
 
@@ -305,21 +307,30 @@ def load_bms(filepath: Path):
     return data
 
 
+def set_origin_low_level(ob: bpy.types.Object, new_origin: Vector):
+    mat_world = ob.matrix_world.copy()
+
+    mat_world_inv = mat_world.inverted_safe()
+
+    mat_trans = Matrix.Translation(new_origin)
+
+    mat_local_new = mat_world_inv @ mat_trans
+
+    ob.matrix_basis = mat_local_new.inverted_safe() @ mat_trans @ mat_local_new
+
 
 def import_bms(path: Path, data):
-    
     context = cast(bpy.types.Context, bpy.context)
     if context.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
 
     if bpy.data.objects.get(data["name"]):
         return cast(bpy.types.Object, bpy.data.objects[data["name"]])
-    
+
     imported_collection = bpy.data.collections.get("bms_import")
     if imported_collection is None:
         imported_collection = bpy.data.collections.new("bms_import")
         context.collection.children.link(imported_collection)
-
 
     mesh = bpy.data.meshes.new("Mesh")
     ob = bpy.data.objects.new(data["name"], mesh)
@@ -339,7 +350,6 @@ def import_bms(path: Path, data):
         group = ob.vertex_groups.new(name=vg["name"])
         group.add(vg["vertex_index"], 1, "ADD")
 
-    # Set weight from vertices
     for vert in ob_data.vertices:
         for g in vert.groups:
             vg = vertex_groups[g.group]
@@ -347,7 +357,6 @@ def import_bms(path: Path, data):
                 if vert.index == index:
                     g.weight = vg["vertex_weight"][i]
 
-    # Add Texture Map
     vertices_uv = data["vertices_uv"]
     uv_layer = mesh.uv_layers.new(name="UVMap")
     for i, face in enumerate(mesh.polygons):
@@ -359,7 +368,6 @@ def import_bms(path: Path, data):
             # Set UV values
             uv_layer.data[loopindex].uv = uv
 
-    # Add Lightmap if exists
     lightmap_uv = data["lightmap_uv"]
     if lightmap_uv:
         uv_layer = mesh.uv_layers.new(name="LightMap")
@@ -372,7 +380,6 @@ def import_bms(path: Path, data):
                 # Set UV values
                 uv_layer.data[loopindex].uv = uv
 
-    
     bpy.ops.object.mode_set(mode="EDIT")
     bm = bmesh.from_edit_mesh(mesh)
 
@@ -401,11 +408,10 @@ def import_bms(path: Path, data):
             e[edge_clothes_layer] = (
                 edge_clothes[edgeKey]["distance"] if edgeKey in edge_clothes else 0.0
             )
-        # Save property - cloth settings
         mesh["SilkroadOnline_ClothSettings"] = data["cloth_settings"]
 
     bpy.ops.object.mode_set(mode="OBJECT")
-    
+
     mat = bpy.data.materials.get(data["material"])
     if not mat:
         raise Exception("material not found")
@@ -414,6 +420,15 @@ def import_bms(path: Path, data):
         ob_data.materials[0] = mat
     else:
         ob_data.materials.append(mat)
+
+    # bbox = data["bounding_box"]["min"]
+
+    # print(bbox)
+
+    # context.scene.cursor.location = Vector(bbox)
+    # bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+    # bpy.ops.object.location_clear(clear_delta=False)
+
 
     return ob
 
@@ -514,45 +529,7 @@ def import_bms(path: Path, data):
 
 #     # Create BBOX
 #     if self.setting_bounding_box:
-#         # Make sure bbox has right values to use
-#         values = data["bounding_box"]["min"] + data["bounding_box"]["max"]
-#         createBBox = True
-#         for value in values:
-#             if math.isnan(value):
-#                 createBBox = False
-#                 break
-#         if createBBox:
-#             # Create object
-#             mesh = bpy.data.meshes.new("Mesh")
-#             objBBox = bpy.data.objects.new(data["name"] + ".BoundingBox", mesh)
-#             context.collection.objects.link(objBBox)
-#             objBBox.select_set(True)
-#             # Create mesh
-#             bboxVertices = [
-#                 [values[0], values[1], values[2]],
-#                 [values[3], values[1], values[2]],
-#                 [values[0], values[4], values[2]],
-#                 [values[3], values[4], values[2]],
-#                 [values[0], values[1], values[5]],
-#                 [values[3], values[1], values[5]],
-#                 [values[0], values[4], values[5]],
-#                 [values[3], values[4], values[5]],
-#             ]
-#             bboxEdges = [
-#                 [0, 1],
-#                 [0, 2],
-#                 [1, 3],
-#                 [2, 3],
-#                 [0, 4],
-#                 [1, 5],
-#                 [2, 6],
-#                 [3, 7],
-#                 [4, 5],
-#                 [4, 6],
-#                 [5, 7],
-#                 [6, 7],
-#             ]
-#             mesh.from_pydata(bboxVertices, bboxEdges, [])
+
 
 #     # Check NavMesh data
 #     if self.setting_navmesh and data["nav_vertices"]:

@@ -25,6 +25,12 @@ class Bbox:
     bbox_max: tuple[float]
 
 
+@dataclass
+class BSRData:
+    materials: list[BSRMaterial]
+    meshes: list[Mesh]
+
+
 class BSRReader:
     bbox_info: Bbox
     materials: list[BSRMaterial]
@@ -91,8 +97,10 @@ class BSRReader:
             self.meshes.append(mesh)
 
     def read(self, filepath: Path):
-
         self.__init__()
+
+        if filepath.suffix != ".bsr":
+            return
 
         print("[ BSRReader ] reading", filepath)
 
@@ -124,8 +132,11 @@ class BSRReader:
             self.read_materials(f)
 
             self.read_meshes(f)
-            
-        print("[ BSRReader ] succesful read")
+            print("[ BSRReader ] succesful read")
+
+            bsr_data = BSRData(materials=self.materials, meshes=self.meshes)
+
+            return bsr_data
 
 
 if __name__ == "__main__":

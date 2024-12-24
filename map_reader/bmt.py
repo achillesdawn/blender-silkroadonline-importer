@@ -45,11 +45,14 @@ class BMT:
     @staticmethod
     def read_diffuse(f: BufferedReader):
         name_len = struct.unpack("<I", f.read(4))[0]
-        diffuse_name = f.read(name_len)
+        diffuse_name = f.read(name_len).decode()
+        diffuse_name = diffuse_name.replace("\\", "/")
+
         diffuse_float, flag1, flag2, is_relative = struct.unpack(
             "<fBB?", f.read(struct.calcsize("<fBB?"))
         )
-        d = Diffuse(diffuse_name.decode(), diffuse_float, flag1, flag2, is_relative)
+        
+        d = Diffuse(diffuse_name, diffuse_float, flag1, flag2, is_relative)
         return d
 
     def read(self, path: Path):

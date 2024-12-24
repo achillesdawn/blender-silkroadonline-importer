@@ -580,6 +580,9 @@ class SILKROAD_OT_IMPORT_SQUARE(BaseOperator):
             for x in range(props.x_start, props.x_start + props.x_size):
                 path = map_data_path / str(y) / (str(x) + ".m")
                 if path.exists():
+                    name = f"x: {x}, y: {y}"
+                    if bpy.data.objects.get(name):
+                        continue
                     b.import_map(path)
 
         return {"FINISHED"}
