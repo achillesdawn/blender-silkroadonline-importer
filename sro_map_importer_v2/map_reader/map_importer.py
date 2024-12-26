@@ -1,33 +1,25 @@
-import sys
-
-sys.path.insert(0, "/home/miguel/python/blender_silkroad_importer/map_reader")
-
 import bpy
 from mathutils import Vector
-
-from bsr import BSRReader, BSRData
-from ofile import MapBlock
-from object_list import read_object_list
-from bmt import BMT, BMTMaterial
-from ofile import OReader, O2Reader
-from bms import load_bms, import_bms
-
-from ddj import DDJTextureReader
-from node_tool import NodeTool
-
 from pathlib import Path
 
+from .bsr import BSRReader, BSRData
+from .ofile import MapBlock
+from .object_list import read_object_list
+from .bmt import BMT, BMTMaterial
+from .ofile import OReader, O2Reader
+from .bms import load_bms, import_bms
 
-DATA_PATH = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Data")
-OBJECT_LIST = Path(
-    "/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/object.ifo"
-)
-MAP_PATH = Path("/home/miguel/python/blender_silkroad_importer/Silkroad_DATA-MAP/Map/")
+from .ddj import DDJTextureReader
+from .node_tool import NodeTool
+
+
+SCALE = Vector([0.003125, 0.003125, 0.003125])
 
 
 class BMTImporter(BMT):
-    def __init__(self) -> None:
+    def __init__(self, data_path: Path) -> None:
         super().__init__()
+        self.data_path = data_path
 
     def import_material(self, material: BMTMaterial):
         m = bpy.data.materials.get(material.name)
@@ -35,12 +27,12 @@ class BMTImporter(BMT):
             return
 
         if material.diffuse.is_relative:
-            diffuse_path = DATA_PATH / material.diffuse.name
+            diffuse_path = self.data_path / material.diffuse.name
         else:
             diffuse_path = self.path / material.diffuse.name
 
         if diffuse_path.suffix not in [".dds", ".ddj"]:
-            print("unexpected texture path:", diffuse_path.as_posix())
+            # print("unexpected texture path:", diffuse_path.as_posix())
             return
 
         if not diffuse_path.exists():
@@ -97,7 +89,11 @@ def map_range(
     return b1 + ((value - a1) * (b2 - b1) / (a2 - a1))
 
 
-class MapImporter:
+class MapObjectsImporter:
+    DATA_PATH: Path
+    MAP_PATH: Path
+    OBJECT_LIST: Path
+
     resources: dict[int, str]
     base_path: Path
 
@@ -108,9 +104,10 @@ class MapImporter:
     bsr_cache: dict[str, BSRData]
     mesh_cache: dict[str, dict]
 
-    def __init__(self) -> None:
-        assert DATA_PATH.exists()
-        assert OBJECT_LIST.exists()
+    def __init__(self, data_path: Path, map_path: Path) -> None:
+        self.DATA_PATH = data_path
+        self.MAP_PATH = map_path
+        self.OBJECT_LIST = map_path / "object.ifo"
 
         self.imported_materials = set()
         self.bsr_cache = {}
@@ -119,13 +116,13 @@ class MapImporter:
         self.x_offset = 0
         self.y_offset = 0
 
-        self.resources = read_object_list(OBJECT_LIST)
+        self.resources = read_object_list(self.OBJECT_LIST)
         self.bsr = BSRReader()
-        self.bmt = BMTImporter()
+        self.bmt = BMTImporter(self.DATA_PATH)
 
     def import_materials(self, data: BSRData):
         for material in data.materials:
-            bmt_path = DATA_PATH / material.name
+            bmt_path = self.DATA_PATH / material.name
 
             if bmt_path.as_posix() in self.imported_materials:
                 continue
@@ -151,7 +148,7 @@ class MapImporter:
                     print(map_ob)
 
                     resource = self.resources[map_ob.ob_id]
-                    resource_path = DATA_PATH / resource
+                    resource_path = self.DATA_PATH / resource
 
                     data = self.bsr_cache.get(resource_path.as_posix())
 
@@ -166,12 +163,14 @@ class MapImporter:
 
                     self.import_materials(data)
 
-                    if bpy.data.collections.get(f"{self.x_offset}-{self.y_offset}-{map_ob.uid}"):
+                    if bpy.data.collections.get(
+                        f"{self.x_offset}-{self.y_offset}-{map_ob.uid}"
+                    ):
                         continue
 
                     obs: list[bpy.types.Object] = []
                     for mesh in data.meshes:
-                        mesh_path = DATA_PATH / mesh.name
+                        mesh_path = self.DATA_PATH / mesh.name
 
                         if mesh_path.as_posix() in self.mesh_cache:
                             imported_bms_data = self.mesh_cache[mesh_path.as_posix()]
@@ -195,12 +194,14 @@ class MapImporter:
                         new_collection_name=f"{self.x_offset}-{self.y_offset}-{map_ob.uid}",
                     )
 
-                    collection = bpy.data.collections.get(f"{self.x_offset}-{self.y_offset}-{map_ob.uid}")
+                    collection = bpy.data.collections.get(
+                        f"{self.x_offset}-{self.y_offset}-{map_ob.uid}"
+                    )
                     assert collection
 
-                    x = map_range((0, 2000), (0, 6), map_ob.x)
-                    y = map_range((0, 2000), (0, 6), map_ob.z)
-                    z = map_range((0, 2000), (0, 6), map_ob.y)
+                    x = map_range((0, 1920), (0, 6), map_ob.x)
+                    y = map_range((0, 1920), (0, 6), map_ob.z)
+                    z = map_range((0, 1920), (0, 6), map_ob.y)
 
                     location = Vector([x, y, z])
 
@@ -208,14 +209,12 @@ class MapImporter:
                         [(self.x_offset * 6) - 0.5, (self.y_offset * 6) - 0.5, 0]
                     )
 
-                    scale = Vector([0.003114, 0.003114, 0.003114])
-
                     location += offset
                     print("moving to", location)
 
                     for ob in collection.objects:
                         ob.location = location
-                        ob.scale = scale
+                        ob.scale = SCALE
                         ob.rotation_euler.z = map_ob.yaw
 
                     bpy.ops.object.select_all(action="DESELECT")
@@ -246,15 +245,4 @@ class MapImporter:
 
 
 if __name__ == "__main__":
-    m = MapImporter()
-
-    for ob in bpy.data.objects:
-        if "x:" in ob.name and "y:" in ob.name:
-            x, y = ob.name.split(",")
-            x = int(x.split(":")[-1].strip())
-            y = int(y.split(":")[-1].strip())
-
-            path = MAP_PATH / f"{y}" / f"{x}"
-
-            m.read_o2(path)
-            # m.read_o(path)
+    pass

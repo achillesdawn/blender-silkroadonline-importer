@@ -18,6 +18,8 @@ from pathlib import Path
 from io import BufferedReader
 from math import floor
 
+from .map_reader.map_importer import MapObjectsImporter
+
 from typing import Set, TypedDict, cast
 
 bl_info = {
@@ -305,7 +307,9 @@ class BlenderMapImporter:
             image_node.name = str(texture_id)
             image_node.label = str(texture_id)
 
-            attribute_node, mix_node, uv_node = self.create_attribute_mix(ntree, texture_id)
+            attribute_node, mix_node, uv_node = self.create_attribute_mix(
+                ntree, texture_id
+            )
             attribute_node.location = ((idx * 200) - 400, idx * 200)
             mix_node.location = ((idx * 200) + 400, idx * 200)
             uv_node.location = ((idx * 200) - 400, (idx * 200) - 200)
@@ -428,12 +432,10 @@ class BlenderMapImporter:
         bpy.ops.object.join()
 
         bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.mesh.remove_doubles()
         bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.shade_auto_smooth()
-
-
 
         if set_height_nodes:
             geo_nodes = cast(
@@ -457,14 +459,30 @@ class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
     y_size: IntProperty(name="y_size", default=1)  # type: ignore
 
 
+class SILKROAD_ADDON_PREFERENCES(bpy.types.AddonPreferences):
+    bl_idname = __package__  # type: ignore
+
+    data_path: StringProperty(name="DATA Path", description="SRO DATA Path", default="", subtype="DIR_PATH")  # type: ignore
+
+    map_path: StringProperty(name="Map Path", description="SRO Map Path", default="",subtype="DIR_PATH")  # type: ignore
+
+    def draw(self, context):
+        layout = self.layout
+
+        col = layout.column()
+
+        col.prop(self, "data_path")
+        col.prop(self, "map_path")
+
+
 class BaseClass:
     @staticmethod
     def get_props() -> SILKROAD_PROPERTIES:
         return getattr(bpy.context.scene, Config.addon_global_var_name)  # type: ignore
 
     @staticmethod
-    def get_preferences() -> SILKROAD_PROPERTIES:
-        return bpy.context.preferences.addons[Config.get_addon_name()].preferences
+    def get_preferences() -> SILKROAD_ADDON_PREFERENCES:
+        return bpy.context.preferences.addons[Config.get_addon_name()].preferences  # type: ignore
 
 
 class BaseOperator(BaseClass, bpy.types.Operator):
@@ -475,10 +493,44 @@ class BaseOperator(BaseClass, bpy.types.Operator):
                 continue
             ob_to_deselect.select_set(False)
 
+        assert bpy.context
         bpy.context.view_layer.objects.active = ob
         ob.select_set(True)
 
         print(f"[ Status ] {ob.name} set to Active Object")
+
+
+class SILKROAD_OT_IMPORT_OBJECTS(BaseOperator):
+    bl_idname = "silkroad.import_objects"
+    bl_label = "Import Map"
+    bl_description = "Import .o2 map files"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context | None) -> bool:
+        assert context
+        enabled_modes = ["OBJECT"]
+        return context.mode in enabled_modes
+
+    def execute(self, context):
+        # props = self.get_props()
+        prefs = self.get_preferences()
+
+        data_path = Path(prefs.data_path)
+        map_path = Path(prefs.map_path)
+
+        m = MapObjectsImporter(data_path=data_path, map_path=map_path)
+
+        for ob in bpy.data.objects:
+            if "x:" in ob.name and "y:" in ob.name:
+                x, y = ob.name.split(",")
+                x = int(x.split(":")[-1].strip())
+                y = int(y.split(":")[-1].strip())
+
+                path = map_path / f"{y}" / f"{x}"
+
+                m.read_o2(path)
+        return {"FINISHED"}
 
 
 class SILKROAD_OT_IMPORT(BaseOperator, ImportHelper):
@@ -568,9 +620,16 @@ class SILKROAD_OT_IMPORT_SQUARE(BaseOperator):
 
     def execute(self, context):
         props = self.get_props()
-        
+        prefs = self.get_preferences()
 
-        map_data_path = Path(bpy.path.abspath(props.map_data_path))
+        if prefs.map_path == "":
+            self.report(
+                {"WARNING"}, "map path empty, set Map Path in addon preferences"
+            )
+            return {"CANCELLED"}
+
+        # map_data_path = Path(bpy.path.abspath(props.map_data_path))
+        map_data_path = Path(bpy.path.abspath(prefs.map_path))
 
         b = BlenderMapImporter(map_data_path)
 
@@ -624,9 +683,22 @@ class SILKROAD_PT_viewportSidePanel(BaseClass, bpy.types.Panel):
         col.operator(
             SILKROAD_OT_IMPORT.bl_idname, text="Import Map", icon="NODE_TEXTURE"
         )
+        col.separator()
+        col.operator(
+            SILKROAD_OT_IMPORT_OBJECTS.bl_idname,
+            text="Import Objects",
+            icon="NODE_TEXTURE",
+        )
 
 
-classes = [SILKROAD_PROPERTIES, SILKROAD_OT_IMPORT, SILKROAD_PT_viewportSidePanel, SILKROAD_OT_IMPORT_SQUARE]
+classes = [
+    SILKROAD_PROPERTIES,
+    SILKROAD_OT_IMPORT,
+    SILKROAD_PT_viewportSidePanel,
+    SILKROAD_OT_IMPORT_SQUARE,
+    SILKROAD_OT_IMPORT_OBJECTS,
+    SILKROAD_ADDON_PREFERENCES,
+]
 
 
 def set_properties():
