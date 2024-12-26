@@ -1,10 +1,9 @@
 import bpy
-from bpy.types import FloatAttribute, IntAttribute, OperatorFileListElement
+from bpy.types import FloatAttribute, IntAttribute
 from bpy.props import (
     StringProperty,
     FloatProperty,
     IntProperty,
-    BoolProperty,
     CollectionProperty,
 )
 from bpy_extras.io_utils import ImportHelper
@@ -25,9 +24,9 @@ from typing import Set, TypedDict, cast
 bl_info = {
     "name": "Blender Silkroad Map Importer",
     "author": "https://www.fiverr.com/olivio \n https://github.com/achillesdawn",
-    "version": (1, 0, 0),
-    "blender": (4, 3, 1),
-    "description": "Import SilkRoad Online Maps (.m files) into blender",
+    "version": (2, 1, 0),
+    "blender": (4, 3, 2),
+    "description": "Import SilkRoad Online Maps: .m files and .o2 files into blender",
     "category": "Import-Export",
 }
 
@@ -462,9 +461,13 @@ class SILKROAD_PROPERTIES(bpy.types.PropertyGroup):
 class SILKROAD_ADDON_PREFERENCES(bpy.types.AddonPreferences):
     bl_idname = __package__  # type: ignore
 
-    data_path: StringProperty(name="DATA Path", description="SRO DATA Path", default="", subtype="DIR_PATH")  # type: ignore
+    data_path: StringProperty(
+        name="DATA Path", description="SRO DATA Path", default="", subtype="DIR_PATH"
+    )  # type: ignore
 
-    map_path: StringProperty(name="Map Path", description="SRO Map Path", default="",subtype="DIR_PATH")  # type: ignore
+    map_path: StringProperty(
+        name="Map Path", description="SRO Map Path", default="", subtype="DIR_PATH"
+    )  # type: ignore
 
     def draw(self, context):
         layout = self.layout
@@ -524,12 +527,16 @@ class SILKROAD_OT_IMPORT_OBJECTS(BaseOperator):
         for ob in bpy.data.objects:
             if "x:" in ob.name and "y:" in ob.name:
                 x, y = ob.name.split(",")
-                x = int(x.split(":")[-1].strip())
-                y = int(y.split(":")[-1].strip())
+                try:
+                    x = int(x.split(":")[-1].strip())
+                    y = int(y.split(":")[-1].strip())
+                except Exception:
+                    continue
 
                 path = map_path / f"{y}" / f"{x}"
 
                 m.read_o2(path)
+
         return {"FINISHED"}
 
 
