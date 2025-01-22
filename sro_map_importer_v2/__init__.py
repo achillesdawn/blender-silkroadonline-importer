@@ -24,7 +24,7 @@ from typing import Set, TypedDict, cast
 bl_info = {
     "name": "Blender Silkroad Map Importer",
     "author": "https://www.fiverr.com/olivio \n https://github.com/achillesdawn",
-    "version": (2, 1, 0),
+    "version": (2, 2, 0),
     "blender": (4, 3, 2),
     "description": "Import SilkRoad Online Maps: .m files and .o2 files into blender",
     "category": "Import-Export",
@@ -535,7 +535,7 @@ class SILKROAD_OT_IMPORT_OBJECTS(BaseOperator):
 
                 path = map_path / f"{y}" / f"{x}"
 
-                m.read_o2(path)
+                m.read_o(path)
 
         return {"FINISHED"}
 
